@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>QR Kod Okuyucu</title>
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; text-align: center; margin: 20px; background: #f4f4f4; }
+    h1 { color: #333; }
+    video { width: 100%; max-width: 380px; border: 3px solid #333; border-radius: 16px; }
+    #output { 
+      margin: 20px; 
+      font-size: 28px; 
+      font-weight: bold; 
+      color: #0b0; 
+      background: #222; 
+      padding: 15px; 
+      border-radius: 10px; 
+      display: inline-block;
+    }
+    button { 
+      padding: 14px 28px; 
+      font-size: 16px; 
+      margin: 10px; 
+      background: #007bff; 
+      color: white; 
+      border: none; 
+      border-radius: 8px; 
+      cursor: pointer;
+    }
+    button:hover { background: #0056b3; }
+    #debug { color: red; font-size: 12px; margin: 10px; }
+  </style>
+</head>
+<body>
+  <h1>QR Kodu Tara</h1>
+  <video id="video" autoplay playsinline></video>
+  <div id="output">Kod bekleniyor...</div>
+  <div id="debug"></div>
+  <button onclick="startScanner()">Yeniden Tara</button>
+
+  <script>
+    const video = document.getElementById('video');
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    const output = document.getElementById('output');
+    const debug = document.getElementById('debug');
+    let scanning = false;
+
+    function logError(msg) {
+      console.error(msg);
+      debug.textContent = msg;
+    }
+
+    async function startScanner() {
+      if (scanning) return;
+      scanning = true;
+      output.textContent = "Kamera açılıyor...";
+      debug.textContent = "";
+
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        logError("getUserMedia desteklenmiyor! HTTPS kullan veya localhost dene.");
+        scanning = false;
+        return;
+      }
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+          video: { facingMode: "environment" } 
+        });
+        video.srcObject = stream;
+        video.play();
+        requestAnimationFrame(tick);
+      } catch (err) {
+        logError("Kamera hatası: " + err.name + " - " + err.message + ". İzin ver veya HTTPS kullan.");
+        if (err.name === 'NotAllowedError') logError("İzin reddedildi veya iframe bloklu!");
+        scanning = false;
+      }
+    }
+
+    function tick() {
+      if (video.readyState === video.HAVE_ENOUGH_DATA) {
+        canvas.height = video.videoHeight;
+        canvas.width = video.videoWidth;
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const code = jsQR(imageData.data, imageData.width, imageData.height, {
+          inversionAttempts: "dontInvert"
+        });
+
+        if (code && code.data) {
+          try {
+            const url = new URL(code.data);
+            const params = new URLSearchParams(url.search);
+            const realCode = params.get('code');
+            if (realCode && /^\d{6}$/.test(realCode)) {
+              output.textContent = realCode;
+              output.style.color = '#0b0';
+              stopScanner();
+              return;
+            }
+          } catch (e) {
+            console.warn('QR parse hatası:', e);
+          }
+        }
+      }
+      if (scanning) requestAnimationFrame(tick);
+    }
+
+    function stopScanner() {
+      scanning = false;
+      if (video.srcObject) {
+        video.srcObject.getTracks().forEach(t => t.stop());
+      }
+    }
+
+    // Otomatik başlat
+    window.onload = startScanner;
+  </script>
+</body>
+</html>
