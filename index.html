@@ -2,26 +2,29 @@
 <html lang="tr">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
   <title>QR Kod Okuyucu</title>
   <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
   <style>
     body {
-      font-family: Arial, sans-serif;
-      background: #111;
+      font-family: 'Segoe UI', Arial, sans-serif;
+      background: #000;
       color: white;
       text-align: center;
       margin: 0;
       padding: 0;
       overflow: hidden;
+      height: 100vh;
     }
+
     h1 {
-      margin-top: 30px;
-      font-size: 26px;
+      margin-top: 25px;
+      font-size: 24px;
     }
-    #startButton {
-      margin-top: 50px;
-      padding: 16px 32px;
+
+    #startButton, #retry {
+      margin-top: 40px;
+      padding: 16px 36px;
       font-size: 20px;
       background: #007bff;
       color: white;
@@ -29,19 +32,20 @@
       border-radius: 10px;
       cursor: pointer;
     }
-    #startButton:hover { background: #0056b3; }
+    #startButton:hover, #retry:hover { background: #0056b3; }
 
     #scanner {
       display: none;
       position: relative;
-      margin-top: 40px;
+      margin-top: 30px;
     }
 
     video {
-      width: 100%;
-      max-width: 400px;
-      border-radius: 12px;
+      width: 95vw;
+      max-width: 420px;
+      border-radius: 16px;
       border: 3px solid #333;
+      box-shadow: 0 0 15px rgba(0,0,0,0.4);
     }
 
     #scanArea {
@@ -51,7 +55,7 @@
       transform: translate(-50%, -50%);
       width: 80%;
       height: 40%;
-      border: 2px solid rgba(255, 255, 255, 0.3);
+      border: 2px solid rgba(255, 255, 255, 0.4);
       border-radius: 12px;
       overflow: hidden;
     }
@@ -61,7 +65,7 @@
       left: 0;
       top: 0;
       width: 100%;
-      height: 2px;
+      height: 3px;
       background: red;
       animation: moveLine 2s linear infinite;
     }
@@ -74,27 +78,16 @@
 
     #output {
       margin-top: 25px;
-      font-size: 28px;
+      font-size: 36px;
       font-weight: bold;
       color: #0b0;
-    }
-
-    #retry {
-      margin-top: 25px;
-      padding: 12px 24px;
-      font-size: 18px;
-      background: #007bff;
-      color: white;
-      border: none;
-      border-radius: 10px;
       display: none;
-      cursor: pointer;
     }
 
     #debug {
       font-size: 12px;
       color: red;
-      margin-top: 10px;
+      margin-top: 8px;
     }
   </style>
 </head>
@@ -107,9 +100,9 @@
     <div id="scanArea"><div id="scanLine"></div></div>
   </div>
 
-  <div id="output"> </div>
+  <div id="output"></div>
   <div id="debug"></div>
-  <button id="retry" onclick="restartScanner()">Yeniden Tara</button>
+  <button id="retry" onclick="restartScanner()" style="display:none;">Yeniden Tara</button>
 
   <script>
     const video = document.getElementById('video');
@@ -120,7 +113,11 @@
     const startButton = document.getElementById('startButton');
     const scanner = document.getElementById('scanner');
     const retry = document.getElementById('retry');
+
     let scanning = false;
+    let lastCode = "";
+    let sameCodeStart = null;
+    const HOLD_TIME = 1200; // 1.2 saniye sabit algılama süresi
 
     function logError(msg) {
       console.error(msg);
@@ -130,7 +127,7 @@
     async function startScanner() {
       startButton.style.display = "none";
       scanner.style.display = "block";
-      output.textContent = "";
+      output.style.display = "none";
       retry.style.display = "none";
       debug.textContent = "";
 
@@ -165,27 +162,42 @@
             const url = new URL(code.data);
             const params = new URLSearchParams(url.search);
             const realCode = params.get('code');
+
             if (realCode && /^\d{6}$/.test(realCode)) {
-              output.textContent = realCode;
-              stopScanner();
-              retry.style.display = "inline-block";
-              return;
+              if (realCode === lastCode) {
+                if (!sameCodeStart) sameCodeStart = Date.now();
+                else if (Date.now() - sameCodeStart >= HOLD_TIME) {
+                  showCode(realCode);
+                  return;
+                }
+              } else {
+                lastCode = realCode;
+                sameCodeStart = Date.now();
+              }
             }
           } catch (e) {
             console.warn('QR parse hatası:', e);
           }
+        } else {
+          sameCodeStart = null;
+          lastCode = "";
         }
       }
       requestAnimationFrame(tick);
     }
 
-    function stopScanner() {
+    function showCode(code) {
       scanning = false;
       if (video.srcObject) video.srcObject.getTracks().forEach(t => t.stop());
+      scanner.style.display = "none";
+      output.textContent = code;
+      output.style.display = "block";
+      retry.style.display = "inline-block";
     }
 
     function restartScanner() {
-      stopScanner();
+      lastCode = "";
+      sameCodeStart = null;
       startScanner();
     }
   </script>
