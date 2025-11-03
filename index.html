@@ -2,114 +2,157 @@
 <html lang="tr">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>QR Kod Okuyucu</title>
   <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
   <style>
     body {
       font-family: Arial, sans-serif;
-      text-align: center;
       background: #111;
-      color: #fff;
+      color: white;
+      text-align: center;
       margin: 0;
+      padding: 0;
       overflow: hidden;
     }
-    h1 { margin-top: 40px; }
-    #scanner-area {
-      display: none;
-      position: relative;
-      margin: 20px auto;
-      width: 90%;
-      max-width: 400px;
-      border: 2px solid #333;
-      border-radius: 16px;
-      overflow: hidden;
+    h1 {
+      margin-top: 30px;
+      font-size: 26px;
     }
-    video {
-      width: 100%;
-      border-radius: 16px;
-    }
-    #scan-line {
-      position: absolute;
-      left: 0;
-      width: 100%;
-      height: 2px;
-      background: red;
-      animation: moveLine 2s linear infinite alternate;
-    }
-    @keyframes moveLine {
-      0% { top: 5%; }
-      100% { top: 95%; }
-    }
-    #output {
-      margin: 20px auto;
-      font-size: 24px;
-      font-weight: bold;
-      color: #0f0;
-      background: #222;
-      padding: 15px 25px;
-      border-radius: 10px;
-      display: none;
-      width: fit-content;
-    }
-    button {
-      padding: 14px 28px;
-      font-size: 18px;
-      margin: 10px;
+    #startButton {
+      margin-top: 50px;
+      padding: 16px 32px;
+      font-size: 20px;
       background: #007bff;
       color: white;
       border: none;
-      border-radius: 8px;
+      border-radius: 10px;
       cursor: pointer;
     }
-    button:hover { background: #0056b3; }
+    #startButton:hover { background: #0056b3; }
+
+    #scanner {
+      display: none;
+      position: relative;
+      margin-top: 40px;
+    }
+
+    video {
+      width: 100%;
+      max-width: 400px;
+      border-radius: 12px;
+      border: 3px solid #333;
+    }
+
+    #scanArea {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 80%;
+      height: 40%;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    #scanLine {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 2px;
+      background: red;
+      animation: moveLine 2s linear infinite;
+    }
+
+    @keyframes moveLine {
+      0% { top: 0; }
+      50% { top: 100%; }
+      100% { top: 0; }
+    }
+
+    #output {
+      margin-top: 25px;
+      font-size: 28px;
+      font-weight: bold;
+      color: #0b0;
+    }
+
+    #retry {
+      margin-top: 25px;
+      padding: 12px 24px;
+      font-size: 18px;
+      background: #007bff;
+      color: white;
+      border: none;
+      border-radius: 10px;
+      display: none;
+      cursor: pointer;
+    }
+
+    #debug {
+      font-size: 12px;
+      color: red;
+      margin-top: 10px;
+    }
   </style>
 </head>
 <body>
-  <h1>QR Kod Okuyucu</h1>
+  <h1>QR Kodu Tara</h1>
+  <button id="startButton" onclick="startScanner()">QR TARA</button>
 
-  <button id="startBtn" onclick="startScanner()">📷 QR TARA</button>
-
-  <div id="scanner-area">
+  <div id="scanner">
     <video id="video" autoplay playsinline></video>
-    <div id="scan-line"></div>
+    <div id="scanArea"><div id="scanLine"></div></div>
   </div>
 
-  <div id="output"></div>
-  <button id="retryBtn" onclick="resetScanner()" style="display:none;">↻ Yeniden Tara</button>
+  <div id="output"> </div>
+  <div id="debug"></div>
+  <button id="retry" onclick="restartScanner()">Yeniden Tara</button>
 
   <script>
     const video = document.getElementById('video');
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
     const output = document.getElementById('output');
-    const scannerArea = document.getElementById('scanner-area');
-    const startBtn = document.getElementById('startBtn');
-    const retryBtn = document.getElementById('retryBtn');
+    const debug = document.getElementById('debug');
+    const startButton = document.getElementById('startButton');
+    const scanner = document.getElementById('scanner');
+    const retry = document.getElementById('retry');
     let scanning = false;
-    let stream = null;
+
+    function logError(msg) {
+      console.error(msg);
+      debug.textContent = msg;
+    }
 
     async function startScanner() {
-      startBtn.style.display = 'none';
-      scannerArea.style.display = 'block';
-      output.style.display = 'none';
-      retryBtn.style.display = 'none';
-      scanning = true;
+      startButton.style.display = "none";
+      scanner.style.display = "block";
+      output.textContent = "";
+      retry.style.display = "none";
+      debug.textContent = "";
+
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        logError("Kamera erişimi desteklenmiyor. HTTPS kullan veya tarayıcı izinlerini kontrol et.");
+        return;
+      }
 
       try {
-        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
         video.srcObject = stream;
-        video.setAttribute('playsinline', true);
         video.play();
+        scanning = true;
         requestAnimationFrame(tick);
       } catch (err) {
-        alert("Kamera hatası: " + err.message);
-        resetScanner();
+        logError("Kamera hatası: " + err.message);
       }
     }
 
     function tick() {
       if (!scanning) return;
+
       if (video.readyState === video.HAVE_ENOUGH_DATA) {
         canvas.height = video.videoHeight;
         canvas.width = video.videoWidth;
@@ -117,29 +160,33 @@
         const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
         const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "dontInvert" });
 
-        if (code) {
-          showResult(code.data);
-          return;
+        if (code && code.data) {
+          try {
+            const url = new URL(code.data);
+            const params = new URLSearchParams(url.search);
+            const realCode = params.get('code');
+            if (realCode && /^\d{6}$/.test(realCode)) {
+              output.textContent = realCode;
+              stopScanner();
+              retry.style.display = "inline-block";
+              return;
+            }
+          } catch (e) {
+            console.warn('QR parse hatası:', e);
+          }
         }
       }
       requestAnimationFrame(tick);
     }
 
-    function showResult(data) {
+    function stopScanner() {
       scanning = false;
-      if (stream) stream.getTracks().forEach(t => t.stop());
-      output.textContent = "📦 QR Kod: " + data;
-      output.style.display = 'block';
-      retryBtn.style.display = 'inline-block';
-      scannerArea.style.display = 'none';
+      if (video.srcObject) video.srcObject.getTracks().forEach(t => t.stop());
     }
 
-    function resetScanner() {
-      output.style.display = 'none';
-      retryBtn.style.display = 'none';
-      startBtn.style.display = 'inline-block';
-      scannerArea.style.display = 'none';
-      if (stream) stream.getTracks().forEach(t => t.stop());
+    function restartScanner() {
+      stopScanner();
+      startScanner();
     }
   </script>
 </body>
